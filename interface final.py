@@ -1736,156 +1736,6 @@ class BioProcessApp(ctk.CTk):
                         "color": color
                     }
         
-        # Ajouter des annotations pour expliquer les phases d'activité
-        # Pour cette analyse, nous utilisons principalement CO2 ou le débit de gaz
-        analysis_data = None
-        analysis_type = None
-        
-        if co2_data:
-            # Utiliser CO2 pour analyser les phases d'activité biologique
-            first_sim = list(co2_data.keys())[0]
-            analysis_data = co2_data[first_sim]
-            analysis_type = "CO2"
-        elif flow_data:
-            # Utiliser le débit de gaz comme indicateur d'activité
-            first_sim = list(flow_data.keys())[0]
-            analysis_data = flow_data[first_sim]
-            analysis_type = "débit"
-        
-        if analysis_data:
-            times = analysis_data["times"]
-            values = analysis_data["values"]
-            
-            # Calculer la dérivée pour identifier les phases d'activité
-            try:
-                from scipy.signal import savgol_filter
-                
-                # Calculer les taux de changement
-                rates = [0]
-                for i in range(1, len(values)):
-                    rate = (values[i] - values[i-1]) / (times[i] - times[i-1])
-                    rates.append(rate)
-                
-                # Lisser les taux pour faciliter l'analyse
-                smooth_window = min(11, len(rates) - 1 if len(rates) % 2 == 0 else len(rates))
-                if smooth_window > 3:
-                    smooth_rates = savgol_filter(rates, smooth_window, 3)
-                else:
-                    smooth_rates = rates
-                
-                # Identifier les phases clés
-                # Phase 1: Lag phase (démarrage lent)
-                # Phase 2: Accélération (activité croissante)
-                # Phase 3: Activité maximale
-                # Phase 4: Ralentissement
-                # Phase 5: Stabilisation
-                
-                # Trouver les points d'inflexion dans les taux de changement
-                inflection_points = []
-                for i in range(1, len(smooth_rates)-1):
-                    if (smooth_rates[i-1] < smooth_rates[i] and smooth_rates[i] > smooth_rates[i+1]) or \
-                       (smooth_rates[i-1] > smooth_rates[i] and smooth_rates[i] < smooth_rates[i+1]):
-                        inflection_points.append(i)
-                
-                # Si trop peu de points, utiliser une approche simplifiée
-                if len(inflection_points) < 2:
-                    # Division simplifiée en 3 phases
-                    lag_end = len(times) // 5
-                    active_end = 4 * len(times) // 5
-                    stabilization_end = len(times) - 1
-                else:
-                    # Utiliser les points d'inflexion pour déterminer les phases
-                    lag_end = inflection_points[0]
-                    
-                    # Trouver le point d'activité maximale
-                    max_activity = max(values)
-                    max_activity_idx = values.index(max_activity)
-                    
-                    # La phase active se termine lorsque l'activité commence à diminuer significativement
-                    active_end = max_activity_idx
-                    for i in inflection_points:
-                        if i > max_activity_idx:
-                            active_end = i
-                            break
-                    
-                    # Le reste est la phase de stabilisation
-                    stabilization_end = len(times) - 1
-                
-                # Colorer les phases identifiées
-                # Phase de lag
-                if lag_end > 0:
-                    ax.axvspan(times[0], times[lag_end], color='blue', alpha=0.1)
-                    ax.annotate('Phase de démarrage\n(activité initiale)', 
-                             xy=((times[0] + times[lag_end])/2, values[lag_end//2]),
-                             xytext=(0, 30),
-                             textcoords='offset points',
-                             ha='center',
-                             bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="blue", alpha=0.7))
-                
-                # Phase active
-                if active_end > lag_end:
-                    ax.axvspan(times[lag_end], times[active_end], color='red', alpha=0.1)
-                    ax.annotate('Phase d\'activité intense\n(production maximale de gaz)', 
-                             xy=((times[lag_end] + times[active_end])/2, values[(lag_end+active_end)//2]),
-                             xytext=(0, -30),
-                             textcoords='offset points',
-                             ha='center',
-                             bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="red", alpha=0.7))
-                
-                # Phase de stabilisation
-                if stabilization_end > active_end:
-                    ax.axvspan(times[active_end], times[stabilization_end], color='green', alpha=0.1)
-                    ax.annotate('Phase de stabilisation\n(ralentissement de l\'activité)', 
-                             xy=((times[active_end] + times[stabilization_end])/2, values[(active_end+stabilization_end)//2]),
-                             xytext=(0, 30),
-                             textcoords='offset points',
-                             ha='center',
-                             bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="green", alpha=0.7))
-                
-                # Ajouter une légende pour les phases
-                ax.legend(
-                    handles=[
-                        mpatches.Patch(color='blue', alpha=0.1, label='Phase de démarrage'),
-                        mpatches.Patch(color='red', alpha=0.1, label='Phase d\'activité intense'),
-                        mpatches.Patch(color='green', alpha=0.1, label='Phase de stabilisation')
-                    ],
-                    title="Phases d'activité",
-                    loc="upper right",
-                    fontsize=9
-                )
-                
-            except Exception as e:
-                print(f"Erreur lors de l'analyse des phases: {str(e)}")
-        
-        # Ajouter des annotations supplémentaires si nous avons des données d'ammoniac
-        if nh3_data and analysis_data:
-            # L'émission d'ammoniac est souvent liée à des périodes de haute température
-            # et à un pH élevé. Annoter les pics d'émission d'ammoniac.
-            first_sim = list(nh3_data.keys())[0]
-            nh3_times = nh3_data[first_sim]["times"]
-            nh3_values = nh3_data[first_sim]["values"]
-            
-            # Calculer la dérivée pour identifier les pics d'émission
-            nh3_rates = [0]
-            for i in range(1, len(nh3_values)):
-                rate = (nh3_values[i] - nh3_values[i-1]) / (nh3_times[i] - nh3_times[i-1])
-                nh3_rates.append(rate)
-            
-            # Identifier les pics d'émission d'ammoniac (taux de changement élevé)
-            max_rate = max(nh3_rates)
-            threshold = max_rate * 0.7  # 70% du taux maximal
-            
-            for i in range(1, len(nh3_rates)):
-                if nh3_rates[i] > threshold:
-                    ax.annotate('Pic d\'émission NH₃\nPossible pH élevé', 
-                             xy=(nh3_times[i], nh3_values[i]),
-                             xytext=(10, 10),
-                             textcoords='offset points',
-                             arrowprops=dict(arrowstyle="->", color="purple"),
-                             bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="purple", alpha=0.7),
-                             fontsize=9)
-                    break  # Une seule annotation pour éviter l'encombrement
-        
         # Configurer le graphique
         ax.set_xlabel("Temps (h)", fontsize=12)
         
@@ -1910,20 +1760,23 @@ class BioProcessApp(ctk.CTk):
             elif volume and not gas_emission and not flow_rate:
                 ax.set_ylabel("Volume (m³)", fontsize=12)
             else:
-                # Plusieurs types de données avec différentes unités
                 ax.set_ylabel("Valeur (voir légende pour unités)", fontsize=12)
-                
-        # Titre et commentaire pédagogique pour NH3 émis
-        if 'NH₃ émis' in selected_options:
-            ax.set_title("Évolution des paramètres de la phase gazeuse\n(Courbe : NH₃ émis cumulés pendant le compostage)", fontsize=14, fontweight='bold')
-            self.gas_figure.text(
-                0.5, 0.01,
-                "Cette courbe montre la quantité totale de NH₃ émise au cours du compostage.\n"
-                "L'émission d'ammoniac est liée à la dégradation de l'azote organique et peut indiquer des pertes d'azote importantes.",
-                ha="center", fontsize=9, color="gray"
-            )
+        
+        # Titre adapté à la courbe sélectionnée
+        if len(selected_options) == 1:
+            if selected_options[0] == "NH₃ émis":
+                ax.set_title("Évolution des paramètres de la phase gazeuse\n(Courbe : NH₃ émis cumulés pendant le compostage)", fontsize=14, fontweight='bold')
+            elif selected_options[0] == "CO₂ généré":
+                ax.set_title("Évolution des paramètres de la phase gazeuse\n(Courbe : CO₂ généré pendant le compostage)", fontsize=14, fontweight='bold')
+            elif selected_options[0] == "O₂ consommé":
+                ax.set_title("Évolution des paramètres de la phase gazeuse\n(Courbe : O₂ consommé pendant le compostage)", fontsize=14, fontweight='bold')
+            elif selected_options[0] == "Débit de gaz d'échappement":
+                ax.set_title("Évolution des paramètres de la phase gazeuse\n(Courbe : Débit de gaz pendant le compostage)", fontsize=14, fontweight='bold')
+            elif selected_options[0] == "Volume de gaz d'échappement":
+                ax.set_title("Évolution des paramètres de la phase gazeuse\n(Courbe : Volume de gaz pendant le compostage)", fontsize=14, fontweight='bold')
         else:
             ax.set_title("Évolution des paramètres de la phase gazeuse", fontsize=14, fontweight='bold')
+        
         ax.grid(True, linestyle='--', alpha=0.7)
         
         # Ajouter une légende seulement si des courbes ont été tracées
@@ -1932,286 +1785,259 @@ class BioProcessApp(ctk.CTk):
             if handles:
                 legend = ax.legend(handles, labels, fontsize=10, title="Simulations", loc="best")
         
-        # Ajuster la mise en page
-        self.gas_figure.tight_layout(pad=2.0)
+        # ===== NOUVEAU : Fonction pour ajouter les annotations pédagogiques =====
+        def add_pedagogical_annotations():
+            print("DEBUG: Adding pedagogical annotations for gas graphs...")
+            
+            # Pour NH3 émis
+            if "NH₃ émis" in selected_options and nh3_data:
+                import numpy as np
+                print(f"DEBUG: Adding NH3 annotations. nh3_data keys: {list(nh3_data.keys())}")
+                
+                first_sim = list(nh3_data.keys())[0]
+                times = nh3_data[first_sim]["times"]
+                values = nh3_data[first_sim]["values"]
+                
+                print(f"DEBUG: NH3 times length: {len(times)}, values length: {len(values)}")
+                print(f"DEBUG: NH3 values min: {min(values)}, max: {max(values)}")
+                
+                # Zones caractéristiques
+                t0 = times[0]
+                t1 = min(200, times[-1])
+                t2 = min(600, times[-1])
+                t3 = times[-1]
+                
+                # Zone 1 : Émission rapide
+                ax.axvspan(t0, t1, color='orange', alpha=0.3)
+                ax.annotate('ÉMISSION RAPIDE', 
+                            xy=(t0 + (t1-t0)/2, max(values)*0.3),
+                            ha='center', va='center', fontsize=12, fontweight='bold',
+                            bbox=dict(boxstyle="round,pad=0.5", fc="white", ec="orange", alpha=0.9))
+                
+                # Zone 2 : Émission modérée
+                if t2 > t1:
+                    ax.axvspan(t1, t2, color='green', alpha=0.3)
+                    ax.annotate('ÉMISSION MODÉRÉE', 
+                                xy=(t1 + (t2-t1)/2, max(values)*0.5),
+                                ha='center', va='center', fontsize=12, fontweight='bold',
+                                bbox=dict(boxstyle="round,pad=0.5", fc="white", ec="green", alpha=0.9))
+                
+                # Zone 3 : Stabilisation
+                if t3 > t2:
+                    ax.axvspan(t2, t3, color='blue', alpha=0.3)
+                    ax.annotate('STABILISATION', 
+                                xy=(t2 + (t3-t2)/2, max(values)*0.7),
+                                ha='center', va='center', fontsize=12, fontweight='bold',
+                                bbox=dict(boxstyle="round,pad=0.5", fc="white", ec="blue", alpha=0.9))
+                
+                # Légende des phases
+                ax.legend(
+                    handles=[
+                        mpatches.Patch(color='orange', alpha=0.3, label='Émission rapide'),
+                        mpatches.Patch(color='green', alpha=0.3, label='Émission modérée'),
+                        mpatches.Patch(color='blue', alpha=0.3, label='Stabilisation')
+                    ],
+                    title="Phases d'émission NH₃",
+                    loc="upper right",
+                    fontsize=10
+                )
+                
+                # Texte pédagogique
+                self.gas_figure.text(
+                    0.5, 0.01,
+                    "Cette courbe montre la quantité totale de NH₃ émise au cours du compostage.\nL'émission d'ammoniac est liée à la dégradation de l'azote organique et peut indiquer des pertes d'azote importantes.",
+                    ha="center", fontsize=10, color="black", fontweight='bold'
+                )
+                print("DEBUG: NH3 annotations added successfully")
+            
+            # Pour Volume de gaz d'échappement
+            if "Volume de gaz d'échappement" in selected_options and volume_data:
+                import numpy as np
+                print(f"DEBUG: Adding Volume gas annotations. volume_data keys: {list(volume_data.keys())}")
+                
+                first_sim = list(volume_data.keys())[0]
+                times = volume_data[first_sim]["times"]
+                values = volume_data[first_sim]["values"]
+                
+                print(f"DEBUG: Volume times length: {len(times)}, values length: {len(values)}")
+                print(f"DEBUG: Volume values min: {min(values)}, max: {max(values)}")
+                
+                # Zones caractéristiques
+                t0 = times[0]
+                t1 = min(200, times[-1])
+                t2 = min(400, times[-1])
+                t3 = times[-1]
+                
+                # Zone 1 : Production rapide
+                ax.axvspan(t0, t1, color='orange', alpha=0.3)
+                ax.annotate('PRODUCTION RAPIDE', 
+                            xy=(t0 + (t1-t0)/2, max(values)*0.3),
+                            ha='center', va='center', fontsize=12, fontweight='bold',
+                            bbox=dict(boxstyle="round,pad=0.5", fc="white", ec="orange", alpha=0.9))
+                
+                # Zone 2 : Plateau
+                if t2 > t1:
+                    ax.axvspan(t1, t2, color='green', alpha=0.3)
+                    ax.annotate('PLATEAU', 
+                                xy=(t1 + (t2-t1)/2, max(values)*0.5),
+                                ha='center', va='center', fontsize=12, fontweight='bold',
+                                bbox=dict(boxstyle="round,pad=0.5", fc="white", ec="green", alpha=0.9))
+                
+                # Zone 3 : Volume stable
+                if t3 > t2:
+                    ax.axvspan(t2, t3, color='blue', alpha=0.3)
+                    ax.annotate('VOLUME STABLE', 
+                                xy=(t2 + (t3-t2)/2, max(values)*0.7),
+                                ha='center', va='center', fontsize=12, fontweight='bold',
+                                bbox=dict(boxstyle="round,pad=0.5", fc="white", ec="blue", alpha=0.9))
+                
+                # Légende des phases
+                ax.legend(
+                    handles=[
+                        mpatches.Patch(color='orange', alpha=0.3, label='Production rapide'),
+                        mpatches.Patch(color='green', alpha=0.3, label='Plateau'),
+                        mpatches.Patch(color='blue', alpha=0.3, label='Volume stable')
+                    ],
+                    title="Phases volume gaz",
+                    loc="upper right",
+                    fontsize=10
+                )
+                
+                # Texte pédagogique
+                self.gas_figure.text(
+                    0.5, 0.01,
+                    "Le volume de gaz d'échappement renseigne sur l'intensité de l'activité biologique et l'aération du procédé.",
+                    ha="center", fontsize=10, color="black", fontweight='bold'
+                )
+                print("DEBUG: Volume gas annotations added successfully")
+            
+            # Pour O₂ consommé
+            if "O₂ consommé" in selected_options and o2_data:
+                import numpy as np
+                print(f"DEBUG: Adding O2 annotations. o2_data keys: {list(o2_data.keys())}")
+                
+                first_sim = list(o2_data.keys())[0]
+                times = o2_data[first_sim]["times"]
+                values = o2_data[first_sim]["values"]
+                
+                print(f"DEBUG: O2 times length: {len(times)}, values length: {len(values)}")
+                print(f"DEBUG: O2 values min: {min(values)}, max: {max(values)}")
+                
+                # Zones caractéristiques
+                t0 = times[0]
+                t1 = min(200, times[-1])
+                t2 = min(600, times[-1])
+                t3 = times[-1]
+                
+                # Zone 1 : Consommation rapide
+                ax.axvspan(t0, t1, color='orange', alpha=0.3)
+                ax.annotate('CONSOMMATION RAPIDE', 
+                            xy=(t0 + (t1-t0)/2, max(values)*0.3),
+                            ha='center', va='center', fontsize=12, fontweight='bold',
+                            bbox=dict(boxstyle="round,pad=0.5", fc="white", ec="orange", alpha=0.9))
+                
+                # Zone 2 : Consommation modérée
+                if t2 > t1:
+                    ax.axvspan(t1, t2, color='green', alpha=0.3)
+                    ax.annotate('PHASE INTERMÉDIAIRE', 
+                                xy=(t1 + (t2-t1)/2, max(values)*0.5),
+                                ha='center', va='center', fontsize=12, fontweight='bold',
+                                bbox=dict(boxstyle="round,pad=0.5", fc="white", ec="green", alpha=0.9))
+                
+                # Zone 3 : Consommation faible
+                if t3 > t2:
+                    ax.axvspan(t2, t3, color='blue', alpha=0.3)
+                    ax.annotate('CONSOMMATION FAIBLE', 
+                                xy=(t2 + (t3-t2)/2, max(values)*0.7),
+                                ha='center', va='center', fontsize=12, fontweight='bold',
+                                bbox=dict(boxstyle="round,pad=0.5", fc="white", ec="blue", alpha=0.9))
+                
+                # Légende des phases
+                ax.legend(
+                    handles=[
+                        mpatches.Patch(color='orange', alpha=0.3, label='Consommation rapide'),
+                        mpatches.Patch(color='green', alpha=0.3, label='Phase intermédiaire'),
+                        mpatches.Patch(color='blue', alpha=0.3, label='Consommation faible')
+                    ],
+                    title="Phases de consommation O₂",
+                    loc="upper right",
+                    fontsize=10
+                )
+                
+                # Texte pédagogique
+                self.gas_figure.text(
+                    0.5, 0.01,
+                    "La consommation d'O₂ reflète l'activité microbienne aérobie.\nUne forte consommation indique une dégradation rapide de la matière organique.",
+                    ha="center", fontsize=10, color="black", fontweight='bold'
+                )
+                print("DEBUG: O2 annotations added successfully")
+                
+            # Pour Débit de gaz d'échappement
+            if "Débit de gaz d'échappement" in selected_options and flow_data:
+                import numpy as np
+                print(f"DEBUG: Adding Gas Flow annotations. flow_data keys: {list(flow_data.keys())}")
+                
+                first_sim = list(flow_data.keys())[0]
+                times = flow_data[first_sim]["times"]
+                values = flow_data[first_sim]["values"]
+                
+                print(f"DEBUG: Gas Flow times length: {len(times)}, values length: {len(values)}")
+                print(f"DEBUG: Gas Flow values min: {min(values)}, max: {max(values)}")
+                
+                # Zones caractéristiques
+                t0 = times[0]
+                t1 = min(200, times[-1])
+                t2 = min(400, times[-1])
+                t3 = times[-1]
+                
+                # Zone 1 : Débit variable
+                ax.axvspan(t0, t1, color='orange', alpha=0.3)
+                ax.annotate('DÉBIT VARIABLE', 
+                            xy=(t0 + (t1-t0)/2, max(values)*0.3),
+                            ha='center', va='center', fontsize=12, fontweight='bold',
+                            bbox=dict(boxstyle="round,pad=0.5", fc="white", ec="orange", alpha=0.9))
+                
+                # Zone 2 : Débit maximal
+                if t2 > t1:
+                    ax.axvspan(t1, t2, color='green', alpha=0.3)
+                    ax.annotate('DÉBIT MAXIMAL', 
+                                xy=(t1 + (t2-t1)/2, max(values)*0.5),
+                                ha='center', va='center', fontsize=12, fontweight='bold',
+                                bbox=dict(boxstyle="round,pad=0.5", fc="white", ec="green", alpha=0.9))
+                
+                # Zone 3 : Débit décroissant
+                if t3 > t2:
+                    ax.axvspan(t2, t3, color='blue', alpha=0.3)
+                    ax.annotate('DÉBIT DÉCROISSANT', 
+                                xy=(t2 + (t3-t2)/2, max(values)*0.7),
+                                ha='center', va='center', fontsize=12, fontweight='bold',
+                                bbox=dict(boxstyle="round,pad=0.5", fc="white", ec="blue", alpha=0.9))
+                
+                # Légende des phases
+                ax.legend(
+                    handles=[
+                        mpatches.Patch(color='orange', alpha=0.3, label='Débit variable'),
+                        mpatches.Patch(color='green', alpha=0.3, label='Débit maximal'),
+                        mpatches.Patch(color='blue', alpha=0.3, label='Débit décroissant')
+                    ],
+                    title="Phases du débit de gaz",
+                    loc="upper right",
+                    fontsize=10
+                )
+                
+                # Texte pédagogique
+                self.gas_figure.text(
+                    0.5, 0.01,
+                    "Le débit de gaz d'échappement est lié à l'intensité de l'activité biologique.\nSes variations reflètent les différentes phases de dégradation du compost.",
+                    ha="center", fontsize=10, color="black", fontweight='bold'
+                )
+                print("DEBUG: Gas Flow annotations added successfully")
         
-        # Mettre à jour le canvas - utilisez le bon canvas
+        # Ajouter les annotations avant le dessin final
+        add_pedagogical_annotations()
+        
+        # Mettre à jour le canvas
         self.gas_canvas.draw()
-    
-    def plot_liquid_graphs(self):
-        """Afficher les graphiques de la phase liquide"""
-        # Effacer le graphique actuel
-        self.liquid_figure.clear()
-        
-        # Récupérer les options sélectionnées
-        selected_options = [option for var, option in self.liquid_vars if var.get()]
-        
-        if not selected_options:
-            messagebox.showinfo("Information", "Veuillez sélectionner au moins une courbe à afficher.")
-            return
-        
-        # Créer un subplot unique
-        ax = self.liquid_figure.add_subplot(111)
-        
-        # Palette de couleurs pour différentes simulations
-        colors = plt.cm.tab10.colors
-        
-        # Tracer les courbes sélectionnées pour chaque simulation
-        legend_added = False
-        moisture_data = {}
-        rh_data = {}
-        
-        # Collecter les données pour toutes les simulations
-        for j, sim in enumerate(self.simulations):
-            data = sim["data"]
-            sim_name = sim["name"]
-            color = colors[j % len(colors)]
-            
-            for option in selected_options:
-                if option == "Humidité massique" and "MoistureFraction" in data:
-                    ax.plot(data["Times"], data["MoistureFraction"], 
-                           label=f"{sim_name} - Humidité massique", color=color, linestyle='-', linewidth=2)
-                    legend_added = True
-                    moisture_data[sim_name] = {
-                        "times": data["Times"],
-                        "values": data["MoistureFraction"],
-                        "color": color
-                    }
-                    
-                elif option == "Humidité relative" and "RelativeHumidity" in data:
-                    ax.plot(data["Times"], data["RelativeHumidity"], 
-                           label=f"{sim_name} - Humidité relative", color=color, linestyle='--', linewidth=2)
-                    legend_added = True
-                    rh_data[sim_name] = {
-                        "times": data["Times"],
-                        "values": data["RelativeHumidity"],
-                        "color": color
-                    }
-        
-        # Ajouter des annotations pour expliquer les zones d'humidité
-        if moisture_data:
-            # Prendre la première simulation pour l'analyse
-            first_sim = list(moisture_data.keys())[0]
-            times = moisture_data[first_sim]["times"]
-            values = moisture_data[first_sim]["values"]
-            
-            # Définir les zones d'humidité de compostage importantes
-            # Zone trop sèche: < 40%
-            # Zone optimale: 40-65%
-            # Zone trop humide: > 65%
-            
-            # Trouver les indices où l'humidité change de zone
-            dry_zone = []
-            optimal_zone = []
-            wet_zone = []
-            
-            current_zone = None
-            start_idx = 0
-            
-            for i, v in enumerate(values):
-                if v < 40 and current_zone != "dry":
-                    if current_zone is not None:
-                        if current_zone == "optimal":
-                            optimal_zone.append((start_idx, i-1))
-                        elif current_zone == "wet":
-                            wet_zone.append((start_idx, i-1))
-                    current_zone = "dry"
-                    start_idx = i
-                elif 40 <= v <= 65 and current_zone != "optimal":
-                    if current_zone is not None:
-                        if current_zone == "dry":
-                            dry_zone.append((start_idx, i-1))
-                        elif current_zone == "wet":
-                            wet_zone.append((start_idx, i-1))
-                    current_zone = "optimal"
-                    start_idx = i
-                elif v > 65 and current_zone != "wet":
-                    if current_zone is not None:
-                        if current_zone == "dry":
-                            dry_zone.append((start_idx, i-1))
-                        elif current_zone == "optimal":
-                            optimal_zone.append((start_idx, i-1))
-                    current_zone = "wet"
-                    start_idx = i
-            
-            # Ajouter la dernière zone
-            if current_zone == "dry":
-                dry_zone.append((start_idx, len(values)-1))
-            elif current_zone == "optimal":
-                optimal_zone.append((start_idx, len(values)-1))
-            elif current_zone == "wet":
-                wet_zone.append((start_idx, len(values)-1))
-                
-            # Colorer et annoter chaque zone
-            for start, end in dry_zone:
-                if end > start:
-                    ax.axvspan(times[start], times[end], color='orange', alpha=0.1)
-                    # Placer l'annotation au milieu de la zone
-                    mid_idx = (start + end) // 2
-                    ax.annotate('Zone trop sèche\n(<40%)\nActivité microbienne ralentie', 
-                             xy=(times[mid_idx], values[mid_idx]),
-                             xytext=(0, 20),
-                             textcoords='offset points',
-                             ha='center',
-                             bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="orange", alpha=0.7))
-            
-            for start, end in optimal_zone:
-                if end > start:
-                    ax.axvspan(times[start], times[end], color='green', alpha=0.1)
-                    # Placer l'annotation au milieu de la zone
-                    mid_idx = (start + end) // 2
-                    ax.annotate('Zone optimale\n(40-65%)\nBonne activité biologique', 
-                             xy=(times[mid_idx], values[mid_idx]),
-                             xytext=(0, -20),
-                             textcoords='offset points',
-                             ha='center',
-                             bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="green", alpha=0.7))
-            
-            for start, end in wet_zone:
-                if end > start:
-                    ax.axvspan(times[start], times[end], color='blue', alpha=0.1)
-                    # Placer l'annotation au milieu de la zone
-                    mid_idx = (start + end) // 2
-                    ax.annotate('Zone trop humide\n(>65%)\nRisque d\'anaérobie', 
-                             xy=(times[mid_idx], values[mid_idx]),
-                             xytext=(0, 20),
-                             textcoords='offset points',
-                             ha='center',
-                             bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="blue", alpha=0.7))
-            
-            # Ajouter des lignes horizontales pour montrer les limites des zones
-            ax.axhline(y=40, color='k', linestyle='--', alpha=0.5)
-            ax.axhline(y=65, color='k', linestyle='--', alpha=0.5)
-            
-            # Ajouter du texte pour indiquer les limites des zones
-            ax.text(times[-1], 40, ' 40%', va='center', ha='left', fontsize=9, bbox=dict(fc='white', ec='none', alpha=0.7))
-            ax.text(times[-1], 65, ' 65%', va='center', ha='left', fontsize=9, bbox=dict(fc='white', ec='none', alpha=0.7))
-            
-            # Ajouter une légende pour les zones
-            ax.legend(
-                handles=[
-                    mpatches.Patch(color='orange', alpha=0.1, label='Zone trop sèche (<40%)'),
-                    mpatches.Patch(color='green', alpha=0.1, label='Zone optimale (40-65%)'),
-                    mpatches.Patch(color='blue', alpha=0.1, label='Zone trop humide (>65%)')
-                ],
-                title="Zones d'humidité",
-                loc="upper right",
-                fontsize=9
-            )
-        
-        # Si nous avons des données d'humidité relative, ajouter des zones et annotations
-        elif rh_data:
-            # Prendre la première simulation pour l'analyse
-            first_sim = list(rh_data.keys())[0]
-            times = rh_data[first_sim]["times"]
-            values = rh_data[first_sim]["values"]
-            
-            # Zones d'humidité relative importantes
-            # Zone sèche: < 70%
-            # Zone normale: 70-90%
-            # Zone saturée: > 90%
-            
-            # Dessiner les lignes horizontales pour les limites des zones
-            ax.axhline(y=70, color='k', linestyle='--', alpha=0.5)
-            ax.axhline(y=90, color='k', linestyle='--', alpha=0.5)
-            
-            # Ajouter du texte pour indiquer les limites des zones
-            ax.text(times[-1], 70, ' 70%', va='center', ha='left', fontsize=9, bbox=dict(fc='white', ec='none', alpha=0.7))
-            ax.text(times[-1], 90, ' 90%', va='center', ha='left', fontsize=9, bbox=dict(fc='white', ec='none', alpha=0.7))
-            
-            # Identifier les phases où l'humidité relative est dans différentes zones
-            dry_zone = []
-            normal_zone = []
-            saturated_zone = []
-            
-            current_zone = None
-            start_idx = 0
-            
-            for i, v in enumerate(values):
-                if v < 70 and current_zone != "dry":
-                    if current_zone is not None:
-                        if current_zone == "normal":
-                            normal_zone.append((start_idx, i-1))
-                        elif current_zone == "saturated":
-                            saturated_zone.append((start_idx, i-1))
-                    current_zone = "dry"
-                    start_idx = i
-                elif 70 <= v <= 90 and current_zone != "normal":
-                    if current_zone is not None:
-                        if current_zone == "dry":
-                            dry_zone.append((start_idx, i-1))
-                        elif current_zone == "saturated":
-                            saturated_zone.append((start_idx, i-1))
-                    current_zone = "normal"
-                    start_idx = i
-                elif v > 90 and current_zone != "saturated":
-                    if current_zone is not None:
-                        if current_zone == "dry":
-                            dry_zone.append((start_idx, i-1))
-                        elif current_zone == "normal":
-                            normal_zone.append((start_idx, i-1))
-                    current_zone = "saturated"
-                    start_idx = i
-                    
-            # Ajouter la dernière zone
-            if current_zone == "dry":
-                dry_zone.append((start_idx, len(values)-1))
-            elif current_zone == "normal":
-                normal_zone.append((start_idx, len(values)-1))
-            elif current_zone == "saturated":
-                saturated_zone.append((start_idx, len(values)-1))
-                
-            # Colorer et annoter chaque zone
-            for start, end in dry_zone:
-                if end > start:
-                    ax.axvspan(times[start], times[end], color='orange', alpha=0.1)
-                    mid_idx = (start + end) // 2
-                    ax.annotate('Air sec (<70% HR)\nDessèchement possible', 
-                             xy=(times[mid_idx], values[mid_idx]),
-                             xytext=(0, 20),
-                             textcoords='offset points',
-                             ha='center',
-                             bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="orange", alpha=0.7))
-            
-            for start, end in normal_zone:
-                if end > start:
-                    ax.axvspan(times[start], times[end], color='green', alpha=0.1)
-                    mid_idx = (start + end) // 2
-                    ax.annotate('Humidité normale (70-90% HR)', 
-                             xy=(times[mid_idx], values[mid_idx]),
-                             xytext=(0, -20),
-                             textcoords='offset points',
-                             ha='center',
-                             bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="green", alpha=0.7))
-            
-            for start, end in saturated_zone:
-                if end > start:
-                    ax.axvspan(times[start], times[end], color='blue', alpha=0.1)
-                    mid_idx = (start + end) // 2
-                    ax.annotate('Air saturé (>90% HR)\nCondensat possible', 
-                             xy=(times[mid_idx], values[mid_idx]),
-                             xytext=(0, -20),
-                             textcoords='offset points',
-                             ha='center',
-                             bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="blue", alpha=0.7))
-        
-        # Configurer le graphique
-        ax.set_xlabel("Temps (h)", fontsize=12)
-        ax.set_ylabel("Humidité (%)", fontsize=12)
-        ax.set_title("Évolution des paramètres de la phase liquide", fontsize=14, fontweight='bold')
-        ax.grid(True, linestyle='--', alpha=0.7)
-        
-        # Ajouter une légende pour les courbes
-        if legend_added:
-            handles, labels = ax.get_legend_handles_labels()
-            if handles:
-                legend = ax.legend(handles, labels, fontsize=10, title="Simulations", loc="upper left")
-        
-        # Ajuster la mise en page
-        self.liquid_figure.tight_layout(pad=2.0)
-        
-        # Mettre à jour le canvas - Utiliser le bon canvas pour la phase liquide
-        self.liquid_canvas.draw()
     
     def export_current_graph(self):
         """Exporter le graphique de l'onglet actif"""
@@ -3379,6 +3205,171 @@ class BioProcessApp(ctk.CTk):
             
             # Mettre à jour le canvas - Utiliser le bon canvas pour la phase solide
             self.solid_canvas.draw()
+
+            # Ajouter des zones/commentaires pour la matière sèche (MS)
+            if len(selected_options) == 1 and "Matière sèche (MS)" in selected_options and solids_data:
+                from scipy.signal import savgol_filter
+                import numpy as np
+                first_sim = list(solids_data.keys())[0]
+                times = solids_data[first_sim]["times"]
+                values = solids_data[first_sim]["values"]
+                # Calcul de la dérivée lissée
+                rates = [0]
+                for i in range(1, len(values)):
+                    rate = (values[i-1] - values[i]) / (times[i] - times[i-1])
+                    rates.append(rate)
+                window = min(11, len(rates) - 1 if len(rates) % 2 == 0 else len(rates))
+                if window > 3:
+                    smooth_rates = savgol_filter(rates, window, 3)
+                else:
+                    smooth_rates = rates
+                # Trouver les phases
+                max_rate_idx = int(np.argmax(smooth_rates))
+                idx0 = 0
+                idx1 = max(1, max_rate_idx//2)
+                idx2 = min(len(times)-2, max_rate_idx+len(times)//10)
+                idx3 = len(times)-1
+                # Zone 1 : Dégradation rapide
+                ax.axvspan(times[idx0], times[idx1], color='orange', alpha=0.1)
+                ax.annotate('Dégradation rapide',
+                    xy=(times[idx0] + (times[idx1]-times[idx0])/2, values[idx0]),
+                    ha='center', va='center', bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="orange", alpha=0.7))
+                # Zone 2 : Ralentissement
+                ax.axvspan(times[idx1], times[idx2], color='green', alpha=0.1)
+                ax.annotate('Ralentissement',
+                    xy=(times[idx1] + (times[idx2]-times[idx1])/2, values[idx2]),
+                    ha='center', va='center', bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="green", alpha=0.7))
+                # Zone 3 : Stabilisation
+                ax.axvspan(times[idx2], times[idx3], color='blue', alpha=0.1)
+                ax.annotate('Stabilisation',
+                    xy=(times[idx2] + (times[idx3]-times[idx2])/2, values[idx3]),
+                    ha='center', va='center', bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="blue", alpha=0.7))
+                # Légende des zones
+                ax.legend(
+                    handles=[
+                        mpatches.Patch(color='orange', alpha=0.1, label='Dégradation rapide'),
+                        mpatches.Patch(color='green', alpha=0.1, label='Ralentissement'),
+                        mpatches.Patch(color='blue', alpha=0.1, label='Stabilisation')
+                    ],
+                    title="Phases de la matière sèche",
+                    loc="upper right",
+                    fontsize=9
+                )
+
+            # Ajouter des zones/commentaires dynamiques pour le rapport C/N (style température)
+            if "Rapport C/N" in selected_options and cn_data:
+                from scipy.signal import savgol_filter
+                import numpy as np
+                first_sim = list(cn_data.keys())[0]
+                times = cn_data[first_sim]["times"]
+                values = cn_data[first_sim]["values"]
+                # Calcul de la dérivée lissée
+                rates = [0]
+                for i in range(1, len(values)):
+                    rate = (values[i] - values[i-1]) / (times[i] - times[i-1])
+                    rates.append(rate)
+                window = min(11, len(rates) - 1 if len(rates) % 2 == 0 else len(rates))
+                if window > 3:
+                    smooth_rates = savgol_filter(rates, window, 3)
+                else:
+                    smooth_rates = rates
+                # Trouver les phases
+                min_rate_idx = int(np.argmin(smooth_rates))
+                idx0 = 0
+                idx1 = max(1, min_rate_idx//2)
+                idx2 = min(len(times)-2, min_rate_idx+len(times)//10)
+                idx3 = max(idx2+1, 3*len(times)//4)
+                idx4 = len(times)-1
+                # Phase initiale
+                ax.axvspan(times[idx0], times[idx1], color='blue', alpha=0.1)
+                ax.annotate('Phase initiale',
+                    xy=(times[idx0] + (times[idx1]-times[idx0])/2, values[idx0]),
+                    ha='center', va='center', bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="blue", alpha=0.7))
+                # Chute rapide
+                ax.axvspan(times[idx1], times[idx2], color='red', alpha=0.1)
+                ax.annotate('Chute rapide du C/N',
+                    xy=(times[idx1] + (times[idx2]-times[idx1])/2, values[idx2]),
+                    ha='center', va='center', bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="red", alpha=0.7))
+                # Ralentissement
+                ax.axvspan(times[idx2], times[idx3], color='green', alpha=0.1)
+                ax.annotate('Ralentissement',
+                    xy=(times[idx2] + (times[idx3]-times[idx2])/2, values[idx3]),
+                    ha='center', va='center', bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="green", alpha=0.7))
+                # Stabilisation
+                ax.axvspan(times[idx3], times[idx4], color='purple', alpha=0.1)
+                ax.annotate('Stabilisation',
+                    xy=(times[idx3] + (times[idx4]-times[idx3])/2, values[idx4]),
+                    ha='center', va='center', bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="purple", alpha=0.7))
+                # Légende des phases
+                ax.legend(
+                    handles=[
+                        mpatches.Patch(color='blue', alpha=0.1, label='Phase initiale'),
+                        mpatches.Patch(color='red', alpha=0.1, label='Chute rapide'),
+                        mpatches.Patch(color='green', alpha=0.1, label='Ralentissement'),
+                        mpatches.Patch(color='purple', alpha=0.1, label='Stabilisation')
+                    ],
+                    title="Phases du rapport C/N",
+                    loc="upper right",
+                    fontsize=9
+                )
+                # Texte pédagogique sous le graphe
+                self.solid_figure.text(
+                    0.5, 0.01,
+                    "Le rapport C/N optimal (20–30) favorise une dégradation efficace et limite les pertes d'azote.\n"
+                    "Une chute rapide indique une forte activité microbienne, la stabilisation marque la maturité du compost.",
+                    ha="center", fontsize=9, color="gray"
+                )
+            self.solid_canvas.draw()
+
+            # FORCING pedagogical zones/comments for Rapport C/N just before draw
+            if "Rapport C/N" in selected_options and cn_data:
+                from scipy.signal import savgol_filter
+                import numpy as np
+                first_sim = list(cn_data.keys())[0]
+                times = cn_data[first_sim]["times"]
+                values = cn_data[first_sim]["values"]
+                rates = [0]
+                for i in range(1, len(values)):
+                    rate = (values[i] - values[i-1]) / (times[i] - times[i-1])
+                    rates.append(rate)
+                window = min(11, len(rates) - 1 if len(rates) % 2 == 0 else len(rates))
+                if window > 3:
+                    smooth_rates = savgol_filter(rates, window, 3)
+                else:
+                    smooth_rates = rates
+                min_rate_idx = int(np.argmin(smooth_rates))
+                idx0 = 0
+                idx1 = max(1, min_rate_idx//2)
+                idx2 = min(len(times)-2, min_rate_idx+len(times)//10)
+                idx3 = max(idx2+1, 3*len(times)//4)
+                idx4 = len(times)-1
+                ax.axvspan(times[idx0], times[idx1], color='blue', alpha=0.1)
+                ax.annotate('Phase initiale', (times[idx0] + (times[idx1]-times[idx0])/2, values[idx0]), ha='center', va='center', bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="blue", alpha=0.7))
+                ax.axvspan(times[idx1], times[idx2], color='red', alpha=0.1)
+                ax.annotate('Chute rapide du C/N', (times[idx1] + (times[idx2]-times[idx1])/2, values[idx2]), ha='center', va='center', bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="red", alpha=0.7))
+                ax.axvspan(times[idx2], times[idx3], color='green', alpha=0.1)
+                ax.annotate('Ralentissement', (times[idx2] + (times[idx3]-times[idx2])/2, values[idx3]), ha='center', va='center', bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="green", alpha=0.7))
+                ax.axvspan(times[idx3], times[idx4], color='purple', alpha=0.1)
+                ax.annotate('Stabilisation', (times[idx3] + (times[idx4]-times[idx3])/2, values[idx4]), ha='center', va='center', bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="purple", alpha=0.7))
+                ax.legend(
+                    handles=[
+                        mpatches.Patch(color='blue', alpha=0.1, label='Phase initiale'),
+                        mpatches.Patch(color='red', alpha=0.1, label='Chute rapide'),
+                        mpatches.Patch(color='green', alpha=0.1, label='Ralentissement'),
+                        mpatches.Patch(color='purple', alpha=0.1, label='Stabilisation')
+                    ],
+                    title="Phases du rapport C/N",
+                    loc="upper right",
+                    fontsize=9
+                )
+                self.solid_figure.text(
+                    0.5, 0.01,
+                    "Le rapport C/N optimal (20–30) favorise une dégradation efficace et limite les pertes d'azote.\n"
+                    "Une chute rapide indique une forte activité microbienne, la stabilisation marque la maturité du compost.",
+                    ha="center", fontsize=9, color="gray"
+                )
+            self.solid_canvas.draw()
+
         except Exception as e:
             messagebox.showerror("Erreur", f"Erreur lors de l'affichage du graphique: {str(e)}")
             import traceback
@@ -3658,6 +3649,146 @@ class BioProcessApp(ctk.CTk):
         
         # Mettre à jour le canvas - Utiliser le bon canvas pour la phase liquide
         self.liquid_canvas.draw()
+
+        # Ajouter des zones/commentaires pour l'humidité massique
+        if len(selected_options) == 1 and "Humidité massique" in selected_options and moisture_data:
+            first_sim = list(moisture_data.keys())[0]
+            times = moisture_data[first_sim]["times"]
+            values = moisture_data[first_sim]["values"]
+            # Zones d'humidité
+            ax.axhspan(0, 40, color='orange', alpha=0.1)
+            ax.annotate('Zone trop sèche (<40%)\nActivité microbienne ralentie',
+                        xy=(times[len(times)//8], 35),
+                        ha='center', va='center', bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="orange", alpha=0.7))
+            ax.axhspan(40, 65, color='green', alpha=0.1)
+            ax.annotate('Zone optimale (40-65%)\nBonne activité biologique',
+                        xy=(times[len(times)//2], 52),
+                        ha='center', va='center', bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="green", alpha=0.7))
+            ax.axhspan(65, max(values)+5, color='blue', alpha=0.1)
+            ax.annotate('Zone trop humide (>65%)\nRisque d\'anaérobie',
+                        xy=(times[7*len(times)//8], min(max(values), 70)),
+                        ha='center', va='center', bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="blue", alpha=0.7))
+            # Légende des zones
+            ax.legend(
+                handles=[
+                    mpatches.Patch(color='orange', alpha=0.1, label='Zone trop sèche (<40%)'),
+                    mpatches.Patch(color='green', alpha=0.1, label='Zone optimale (40-65%)'),
+                    mpatches.Patch(color='blue', alpha=0.1, label='Zone trop humide (>65%)')
+                ],
+                title="Zones d'humidité massique",
+                loc="upper right",
+                fontsize=9
+            )
+
+        # --- Correction superposition texte pédagogique pour Rapport C/N ---
+        # (Déjà corrigé dans la section solide, rien à faire ici)
+
+        # --- Forcer zones/commentaires pour NH3 émis et Volume de gaz d'échappement ---
+        import numpy as np
+        from scipy.signal import savgol_filter
+        # NH3 émis
+        if "NH₃ émis" in selected_options and nh3_data:
+            first_sim = list(nh3_data.keys())[0]
+            times = nh3_data[first_sim]["times"]
+            values = nh3_data[first_sim]["values"]
+            rates = [0]
+            for i in range(1, len(values)):
+                rate = (values[i] - values[i-1]) / (times[i] - times[i-1])
+                rates.append(rate)
+            window = min(11, len(rates) - 1 if len(rates) % 2 == 0 else len(rates))
+            if window > 3:
+                smooth_rates = savgol_filter(rates, window, 3)
+            else:
+                smooth_rates = rates
+            max_rate_idx = int(np.argmax(smooth_rates))
+            idx0 = 0
+            idx1 = max(1, max_rate_idx//2)
+            idx2 = min(len(times)-2, max_rate_idx+len(times)//10)
+            idx3 = len(times)-1
+            ax.axvspan(times[idx0], times[idx1], color='orange', alpha=0.1)
+            ax.annotate('Émission rapide', (times[idx0] + (times[idx1]-times[idx0])/2, values[idx0]), ha='center', va='center', bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="orange", alpha=0.7))
+            ax.axvspan(times[idx1], times[idx2], color='green', alpha=0.1)
+            ax.annotate('Émission modérée', (times[idx1] + (times[idx2]-times[idx1])/2, values[idx2]), ha='center', va='center', bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="green", alpha=0.7))
+            ax.axvspan(times[idx2], times[idx3], color='blue', alpha=0.1)
+            ax.annotate('Stabilisation', (times[idx2] + (times[idx3]-times[idx2])/2, values[idx3]), ha='center', va='center', bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="blue", alpha=0.7))
+            ax.legend(
+                handles=[
+                    mpatches.Patch(color='orange', alpha=0.1, label='Émission rapide'),
+                    mpatches.Patch(color='green', alpha=0.1, label='Émission modérée'),
+                    mpatches.Patch(color='blue', alpha=0.1, label='Stabilisation')
+                ],
+                title="Phases NH₃ émis",
+                loc="upper right",
+                fontsize=9
+            )
+            self.gas_figure.text(
+                0.5, 0.01,
+                "L'émission de NH₃ est liée à la dégradation de l'azote organique.\nDes émissions élevées peuvent indiquer des pertes d'azote importantes.",
+                ha="center", fontsize=9, color="gray"
+            )
+        # Volume de gaz d'échappement
+        if "Volume de gaz d'échappement" in selected_options and volume_data:
+            first_sim = list(volume_data.keys())[0]
+            times = volume_data[first_sim]["times"]
+            values = volume_data[first_sim]["values"]
+            idx0 = 0
+            idx1 = max(1, len(times)//5)
+            idx2 = max(idx1+1, 2*len(times)//5)
+            idx3 = len(times)-1
+            ax.axvspan(times[idx0], times[idx1], color='orange', alpha=0.1)
+            ax.annotate('Production rapide', (times[idx0] + (times[idx1]-times[idx0])/2, values[idx0]), ha='center', va='center', bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="orange", alpha=0.7))
+            ax.axvspan(times[idx1], times[idx2], color='green', alpha=0.1)
+            ax.annotate('Plateau', (times[idx1] + (times[idx2]-times[idx1])/2, values[idx2]), ha='center', va='center', bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="green", alpha=0.7))
+            ax.axvspan(times[idx2], times[idx3], color='blue', alpha=0.1)
+            ax.annotate('Volume stable', (times[idx2] + (times[idx3]-times[idx2])/2, values[idx3]), ha='center', va='center', bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="blue", alpha=0.7))
+            ax.legend(
+                handles=[
+                    mpatches.Patch(color='orange', alpha=0.1, label='Production rapide'),
+                    mpatches.Patch(color='green', alpha=0.1, label='Plateau'),
+                    mpatches.Patch(color='blue', alpha=0.1, label='Volume stable')
+                ],
+                title="Phases volume gaz",
+                loc="upper right",
+                fontsize=9
+            )
+            self.gas_figure.text(
+                0.5, 0.01,
+                "Le volume de gaz d'échappement renseigne sur l'intensité de l'activité biologique et l'aération du procédé.",
+                ha="center", fontsize=9, color="gray"
+            )
+        self.gas_canvas.draw()
+
+        # FORCING pedagogical zones/comments for Volume de gaz d'échappement just before draw
+        if "Volume de gaz d'échappement" in selected_options and volume_data:
+            first_sim = list(volume_data.keys())[0]
+            times = volume_data[first_sim]["times"]
+            values = volume_data[first_sim]["values"]
+            idx0 = 0
+            idx1 = max(1, len(times)//5)
+            idx2 = max(idx1+1, 2*len(times)//5)
+            idx3 = len(times)-1
+            ax.axvspan(times[idx0], times[idx1], color='orange', alpha=0.1)
+            ax.annotate('Production rapide', (times[idx0] + (times[idx1]-times[idx0])/2, values[idx0]), ha='center', va='center', bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="orange", alpha=0.7))
+            ax.axvspan(times[idx1], times[idx2], color='green', alpha=0.1)
+            ax.annotate('Plateau', (times[idx1] + (times[idx2]-times[idx1])/2, values[idx2]), ha='center', va='center', bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="green", alpha=0.7))
+            ax.axvspan(times[idx2], times[idx3], color='blue', alpha=0.1)
+            ax.annotate('Volume stable', (times[idx2] + (times[idx3]-times[idx2])/2, values[idx3]), ha='center', va='center', bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="blue", alpha=0.7))
+            ax.legend(
+                handles=[
+                    mpatches.Patch(color='orange', alpha=0.1, label='Production rapide'),
+                    mpatches.Patch(color='green', alpha=0.1, label='Plateau'),
+                    mpatches.Patch(color='blue', alpha=0.1, label='Volume stable')
+                ],
+                title="Phases volume gaz",
+                loc="upper right",
+                fontsize=9
+            )
+            self.gas_figure.text(
+                0.5, 0.01,
+                "Le volume de gaz d'échappement renseigne sur l'intensité de l'activité biologique et l'aération du procédé.",
+                ha="center", fontsize=9, color="gray"
+            )
+        self.gas_canvas.draw()
 
 if __name__ == "__main__":
     try:
