@@ -533,7 +533,16 @@ class SimulationModel:
     @staticmethod
     def plot_results(results):
         """
-        Méthode pour afficher les graphiques des résultats, compatible avec l'interface
+        Méthode pour afficher les graphiques des résultats de la simulation de compostage.
+        
+        Cette méthode crée 7 graphiques montrant l'évolution temporelle de différents paramètres :
+        1. Température : montre les phases mésophile, thermophile et de refroidissement
+        2. Humidité : évolution de la masse d'eau dans le système
+        3. Fraction d'humidité : pourcentage d'humidité dans le mélange
+        4. Gaz d'échappement (masse) : production de CO2 et consommation d'O2
+        5. Gaz d'échappement (volume) : volume total des gaz produits
+        6. Humidité relative : humidité de l'air dans le tas
+        7. Matières solides : évolution de la masse sèche
         """
         # Extraction des données
         Times_array = results["Times"]
@@ -545,58 +554,76 @@ class SimulationModel:
         RelativeHumidity_array = results["RelativeHumidity"]
         Solids_array = results["Solids"]
         
-        # Graphiques
+        # Création de la figure avec 7 sous-graphiques
         plt.figure(figsize=(12, 8))
         
+        # 1. Graphique de la température
         plt.subplot(4, 2, 1)
         plt.plot(Times_array, Temperatures_array, '-')
-        plt.title('Temperature Over Time')
-        plt.xlabel('Time (h)')
-        plt.ylabel('Temperature (°C)')
+        plt.title('Évolution de la Température')
+        plt.xlabel('Temps (h)')
+        plt.ylabel('Température (°C)')
         plt.grid(True)
+        # Ajout de lignes de référence pour les phases
+        plt.axhline(y=40, color='r', linestyle='--', alpha=0.3, label='Phase mésophile')
+        plt.axhline(y=60, color='g', linestyle='--', alpha=0.3, label='Phase thermophile')
+        plt.legend()
         
+        # 2. Graphique de l'humidité (masse)
         plt.subplot(4, 2, 2)
         plt.plot(Times_array, Moisture_array, '-')
-        plt.title('Moisture Over Time')
-        plt.xlabel('Time (h)')
-        plt.ylabel('Moisture (kg)')
+        plt.title('Évolution de la Masse d\'Eau')
+        plt.xlabel('Temps (h)')
+        plt.ylabel('Masse d\'eau (kg)')
         plt.grid(True)
         
+        # 3. Graphique de la fraction d'humidité
         plt.subplot(4, 2, 3)
         plt.plot(Times_array, MoistureFraction_array, '-')
-        plt.title('Moisture Fraction Over Time')
-        plt.xlabel('Time (h)')
-        plt.ylabel('Moisture Fraction (%)')
+        plt.title('Évolution de la Fraction d\'Humidité')
+        plt.xlabel('Temps (h)')
+        plt.ylabel('Fraction d\'humidité (%)')
         plt.grid(True)
+        # Ligne de référence pour l'humidité optimale
+        plt.axhline(y=50, color='g', linestyle='--', alpha=0.3, label='Humidité optimale')
+        plt.legend()
         
+        # 4. Graphique des gaz d'échappement (masse)
         plt.subplot(4, 2, 4)
         plt.plot(Times_array, QExhaustgases_array, '-')
-        plt.title('Exhaust Gases Mass Over Time')
-        plt.xlabel('Time (h)')
-        plt.ylabel('Exhaust Gases (kg)')
+        plt.title('Évolution de la Masse des Gaz d\'Échappement')
+        plt.xlabel('Temps (h)')
+        plt.ylabel('Masse des gaz (kg)')
         plt.grid(True)
         
+        # 5. Graphique des gaz d'échappement (volume)
         plt.subplot(4, 2, 5)
         plt.plot(Times_array, VExhaustgases_array, '-')
-        plt.title('Exhaust Gases Volume Over Time')
-        plt.xlabel('Time (h)')
-        plt.ylabel('Exhaust Gases (m³)')
+        plt.title('Évolution du Volume des Gaz d\'Échappement')
+        plt.xlabel('Temps (h)')
+        plt.ylabel('Volume des gaz (m³)')
         plt.grid(True)
         
+        # 6. Graphique de l'humidité relative
         plt.subplot(4, 2, 6)
         plt.plot(Times_array, RelativeHumidity_array, '-')
-        plt.title('Relative Humidity Over Time')
-        plt.xlabel('Time (h)')
-        plt.ylabel('Relative Humidity (%)')
+        plt.title('Évolution de l\'Humidité Relative')
+        plt.xlabel('Temps (h)')
+        plt.ylabel('Humidité relative (%)')
         plt.grid(True)
+        # Ligne de référence pour l'humidité relative optimale
+        plt.axhline(y=60, color='g', linestyle='--', alpha=0.3, label='Humidité relative optimale')
+        plt.legend()
         
+        # 7. Graphique des matières solides
         plt.subplot(4, 2, 7)
         plt.plot(Times_array, Solids_array, '-')
-        plt.title('Solids Over Time')
-        plt.xlabel('Time (h)')
-        plt.ylabel('Solids (kg)')
+        plt.title('Évolution de la Masse des Matières Solides')
+        plt.xlabel('Temps (h)')
+        plt.ylabel('Masse solide (kg)')
         plt.grid(True)
         
+        # Ajustement de la mise en page
         plt.tight_layout()
         plt.show()
 

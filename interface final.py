@@ -1913,7 +1913,17 @@ class BioProcessApp(ctk.CTk):
                 # Plusieurs types de données avec différentes unités
                 ax.set_ylabel("Valeur (voir légende pour unités)", fontsize=12)
                 
-        ax.set_title("Évolution des paramètres de la phase gazeuse", fontsize=14, fontweight='bold')
+        # Titre et commentaire pédagogique pour NH3 émis
+        if 'NH₃ émis' in selected_options:
+            ax.set_title("Évolution des paramètres de la phase gazeuse\n(Courbe : NH₃ émis cumulés pendant le compostage)", fontsize=14, fontweight='bold')
+            self.gas_figure.text(
+                0.5, 0.01,
+                "Cette courbe montre la quantité totale de NH₃ émise au cours du compostage.\n"
+                "L'émission d'ammoniac est liée à la dégradation de l'azote organique et peut indiquer des pertes d'azote importantes.",
+                ha="center", fontsize=9, color="gray"
+            )
+        else:
+            ax.set_title("Évolution des paramètres de la phase gazeuse", fontsize=14, fontweight='bold')
         ax.grid(True, linestyle='--', alpha=0.7)
         
         # Ajouter une légende seulement si des courbes ont été tracées
@@ -2418,11 +2428,25 @@ class BioProcessApp(ctk.CTk):
     
     def create_sensitivity_tab(self):
         """Create a tab for sensitivity analysis on air flow rate"""
-        container = ctk.CTkFrame(self.sensitivity_frame)
-        container.pack(expand=True, fill="both", padx=15, pady=15)
-        
+        # --- NOUVEAU : Canvas principal scrollable pour tout l'onglet ---
+        main_canvas = ctk.CTkCanvas(self.sensitivity_frame)
+        main_canvas.pack(fill="both", expand=True)
+        main_scrollbar = ctk.CTkScrollbar(self.sensitivity_frame, orientation="vertical", command=main_canvas.yview)
+        main_scrollbar.pack(side="right", fill="y")
+        main_canvas.configure(yscrollcommand=main_scrollbar.set)
+
+        # Frame principal qui contient tout le contenu de l'onglet
+        main_frame = ctk.CTkFrame(main_canvas)
+        main_canvas.create_window((0, 0), window=main_frame, anchor="nw")
+
+        def _on_main_frame_configure(event):
+            main_canvas.configure(scrollregion=main_canvas.bbox("all"))
+        main_frame.bind("<Configure>", _on_main_frame_configure)
+        main_canvas.bind_all("<MouseWheel>", lambda event: main_canvas.yview_scroll(int(-1*(event.delta/120)), "units"))
+
+        # --- Début du contenu de l'onglet (inchangé, mais dans main_frame) ---
         # Title with background
-        title_frame = ctk.CTkFrame(container, fg_color="#3a7ebf")
+        title_frame = ctk.CTkFrame(main_frame, fg_color="#3a7ebf")
         title_frame.pack(fill="x", padx=10, pady=(0, 15))
         
         title_label = ctk.CTkLabel(
@@ -2432,9 +2456,33 @@ class BioProcessApp(ctk.CTk):
             text_color="white"
         )
         title_label.pack(pady=10)
+
+        # Encadré pédagogique (NOUVEAU TEXTE)
+        info_frame = ctk.CTkFrame(main_frame, fg_color="#f0f0f0")
+        info_frame.pack(fill="x", padx=10, pady=(0, 15))
         
+        info_text = (
+            "Afin de garantir la pertinence de l'analyse de sensibilité appliquée au débit d'air, plusieurs critères de validation doivent être considérés conjointement.\n\n"
+            "• Température : doit être > 55°C pendant au moins 3 jours consécutifs pour assurer l'hygiénisation.\n"
+            "• Humidité finale : doit rester entre 40% et 65% pour maintenir une bonne activité biologique\n"
+            "• Émissions de NH₃ : doivent rester sous un seuil critique pour limiter les pertes azotées\n"
+            "• Rapport C/N final : doit se situer entre 15 et 20 pour garantir la maturité du compost.\n"
+            "• Consommation énergétique : doit rester raisonnable pour éviter un dimensionnement coûteux ou inefficace.\n\n"
+            "L'intégration conjointe de ces contraintes permet d'identifier un débit d'air optimal conciliant performance biologique, efficacité énergétique et qualité du compost produit."
+        )
+        
+        info_label = ctk.CTkLabel(
+            info_frame,
+            text=info_text,
+            font=("Arial", 11),
+            text_color="#333333",
+            justify="left",
+            wraplength=1000
+        )
+        info_label.pack(padx=15, pady=15)
+
         # Parameters frame
-        params_frame = ctk.CTkFrame(container)
+        params_frame = ctk.CTkFrame(main_frame)
         params_frame.pack(fill="x", padx=10, pady=10)
         
         # Parameters layout with grid
@@ -2475,13 +2523,19 @@ class BioProcessApp(ctk.CTk):
         
         self.optimization_criteria = ctk.CTkComboBox(
             criteria_frame,
-            values=["Température maximale", "Dégradation des solides", "Humidité finale", "Ratio dégradation/énergie", "Rapport C/N final"],
-            width=200
+            values=[
+                "Température >55°C pendant 3 jours",
+                "Humidité finale dans [40%, 65%]",
+                "Rapport C/N final dans [15, 20]",
+                "NH₃ émis sous seuil critique",
+                "Consommation énergétique raisonnable"
+            ],
+            width=250
         )
         self.optimization_criteria.pack(side="left", padx=5)
         
         # Run analysis button
-        button_frame = ctk.CTkFrame(container)
+        button_frame = ctk.CTkFrame(main_frame)
         button_frame.pack(pady=20)
         
         run_analysis_btn = ctk.CTkButton(
@@ -2496,57 +2550,24 @@ class BioProcessApp(ctk.CTk):
         )
         run_analysis_btn.pack(pady=5)
         
-        # Results display area with scrollable canvas
-        # Créer un cadre avec défilement
-        results_container = ctk.CTkFrame(container)
-        results_container.pack(fill="both", expand=True, padx=10, pady=10)
-        
-        # Créer un canvas scrollable
-        self.sensitivity_canvas = ctk.CTkCanvas(results_container)
-        scrollbar = ctk.CTkScrollbar(results_container, orientation="vertical", command=self.sensitivity_canvas.yview)
-        scrollbar.pack(side="right", fill="y")
-        
-        self.sensitivity_canvas.configure(yscrollcommand=scrollbar.set)
-        self.sensitivity_canvas.pack(side="left", fill="both", expand=True)
-        
-        # Cadre à l'intérieur du canvas pour contenir tous les éléments
-        self.results_frame = ctk.CTkFrame(self.sensitivity_canvas)
-        self.sensitivity_canvas.create_window((0, 0), window=self.results_frame, anchor="nw")
-        
-        # Configurer le défilement
-        self.results_frame.bind("<Configure>", 
-                           lambda e: self.sensitivity_canvas.configure(
-                               scrollregion=self.sensitivity_canvas.bbox("all"),
-                               width=e.width
-                           ))
-        
-        # Activer le défilement avec la molette de souris
-        self.sensitivity_canvas.bind_all("<MouseWheel>", self._on_mousewheel)
-        
-        # Titre des résultats
+        # Results display area (graph + texte)
         results_label = ctk.CTkLabel(
-            self.results_frame,
+            main_frame,
             text="Résultats de l'analyse",
             font=("Arial", 14, "bold")
         )
         results_label.pack(anchor="w", padx=10, pady=10)
         
-        # Zone pour afficher le graphique
-        self.sensitivity_graph_frame = ctk.CTkFrame(self.results_frame)
+        self.sensitivity_graph_frame = ctk.CTkFrame(main_frame)
         self.sensitivity_graph_frame.pack(fill="both", expand=True, padx=10, pady=10)
-        
-        self.sensitivity_figure = plt.Figure(figsize=(10, 10), dpi=100)  # Figure plus grande pour plus de détails
+        self.sensitivity_figure = plt.Figure(figsize=(10, 8), dpi=100)
         self.sensitivity_canvas_plot = FigureCanvasTkAgg(self.sensitivity_figure, self.sensitivity_graph_frame)
         self.sensitivity_canvas_plot.get_tk_widget().pack(expand=True, fill="both")
-        
-        # Ajouter une barre d'outils de navigation pour le graphique
         toolbar_frame = ctk.CTkFrame(self.sensitivity_graph_frame)
         toolbar_frame.pack(side="bottom", fill="x")
         toolbar = NavigationToolbar2Tk(self.sensitivity_canvas_plot, toolbar_frame)
         toolbar.update()
-        
-        # Zone de texte pour les résultats
-        self.sensitivity_results_text = ctk.CTkTextbox(self.results_frame, height=150)
+        self.sensitivity_results_text = ctk.CTkTextbox(main_frame, height=150)
         self.sensitivity_results_text.pack(fill="x", expand=False, padx=10, pady=10)
     
     def _on_mousewheel(self, event):
@@ -2646,7 +2667,7 @@ class BioProcessApp(ctk.CTk):
         return cn_ratios, True
 
     def run_sensitivity_analysis(self):
-        """Run sensitivity analysis with varying air flow rates"""
+        """Run sensitivity analysis with strict validation for each criterion"""
         try:
             # Vérifier si des substrats ont été définis
             if not self.substrates:
@@ -2755,18 +2776,18 @@ class BioProcessApp(ctk.CTk):
                     cn_ratio_values.append(0)
                 
                 # Calculate the criteria value based on selected optimization criterion
-                if criteria == "Température maximale":
-                    criteria_value = max(sim_result["Temperatures"])
-                elif criteria == "Dégradation des solides":
-                    criteria_value = sim_result["Solids"][0] - sim_result["Solids"][-1]
-                elif criteria == "Humidité finale":
-                    criteria_value = sim_result["MoistureFraction"][-1]
-                elif criteria == "Ratio dégradation/énergie":
+                if criteria == "Température >55°C pendant 3 jours":
+                    criteria_value = max([t for t in sim_result["Temperatures"] if t > 55], default=0) > 0
+                elif criteria == "Humidité finale dans [40%, 65%]":
+                    criteria_value = 40 <= sim_result["MoistureFraction"][-1] <= 65
+                elif criteria == "Rapport C/N final dans [15, 20]":
+                    criteria_value = len(cn_ratios) > 0 and 15 <= cn_ratios[-1] <= 20
+                elif criteria == "NH₃ émis sous seuil critique":
+                    criteria_value = "NH3" in sim_result["data"] and sim_result["data"]["NH3"][-1] < 1.0  # seuil critique arbitraire (à ajuster)
+                elif criteria == "Consommation énergétique raisonnable":
                     solids_degraded = sim_result["Solids"][0] - sim_result["Solids"][-1]
                     energy_consumed = flow * sim_params["HRT"]  # Simple energy estimate
                     criteria_value = solids_degraded / energy_consumed if energy_consumed > 0 else 0
-                elif criteria == "Rapport C/N final":
-                    criteria_value = cn_ratios[-1] if success and len(cn_ratios) > 0 else 0
                 else:
                     criteria_value = 0
                 
@@ -2777,13 +2798,13 @@ class BioProcessApp(ctk.CTk):
             
             # Find the optimal air flow
             optimal_index = 0
-            if criteria in ["Température maximale", "Dégradation des solides", "Ratio dégradation/énergie"]:
+            if criteria in ["Température >55°C pendant 3 jours", "Humidité finale dans [40%, 65%]", "Rapport C/N final dans [15, 20]", "NH₃ émis sous seuil critique"]:
                 # For these criteria, higher is better
                 optimal_index = criteria_values.index(max(criteria_values))
-            elif criteria == "Rapport C/N final":
-                # Pour le rapport C/N, on cherche idéalement une valeur autour de 25-30
-                ideal_cn = 25.0
-                optimal_index = min(range(len(criteria_values)), key=lambda i: abs(criteria_values[i] - ideal_cn))
+            elif criteria == "Consommation énergétique raisonnable":
+                # For energy, closer to ideal (around 60%) is better
+                ideal_energy = 60.0
+                optimal_index = min(range(len(criteria_values)), key=lambda i: abs(criteria_values[i] - ideal_energy))
             else:
                 # For humidity, closer to ideal (around 60%) is better
                 ideal_humidity = 60.0
@@ -2795,13 +2816,13 @@ class BioProcessApp(ctk.CTk):
             self.sensitivity_figure.clear()
             
             # Définir une taille adaptée à la fenêtre
-            self.sensitivity_figure.set_size_inches(10, 10)  # Dimensions plus grandes
+            self.sensitivity_figure.set_size_inches(10, 8)
             
             # Créer deux subplots dans la figure existante avec des proportions ajustées
-            gs = self.sensitivity_figure.add_gridspec(2, 1, height_ratios=[3, 2], hspace=0.3)  # Plus d'espace entre les graphiques
+            gs = self.sensitivity_figure.add_gridspec(2, 1, height_ratios=[2, 1], hspace=0.3)
             
-            ax1 = self.sensitivity_figure.add_subplot(gs[0])  # Premier subplot avec plus d'espace
-            ax2 = self.sensitivity_figure.add_subplot(gs[1], sharex=ax1)  # Deuxième subplot partageant l'axe x
+            ax1 = self.sensitivity_figure.add_subplot(gs[0])
+            ax2 = self.sensitivity_figure.add_subplot(gs[1], sharex=ax1)
             
             # Premier graphique - critère principal
             ax1.plot(air_flow_values, criteria_values, 'o-', linewidth=2.5, markersize=8, color='blue')
@@ -2821,7 +2842,7 @@ class BioProcessApp(ctk.CTk):
                      arrowprops=dict(arrowstyle="->", connectionstyle="arc3,rad=.5"))
             
             # Ajouter des zones explicatives pour le graphique principal
-            if criteria in ["Dégradation des solides", "Température maximale", "Ratio dégradation/énergie"]:
+            if criteria in ["Humidité finale dans [40%, 65%]", "Rapport C/N final dans [15, 20]", "NH₃ émis sous seuil critique"]:
                 # Zone de croissance
                 ax1.axvspan(min(air_flow_values), optimal_flow, color='blue', alpha=0.1)
                 ax1.annotate('Zone efficace\n(rendement croissant)', 
@@ -2837,23 +2858,23 @@ class BioProcessApp(ctk.CTk):
                          ha='center', va='center',
                          fontsize=10,
                          bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="red", alpha=0.8))
-            elif criteria == "Humidité finale":
-                # Pour l'humidité finale, on cherche souvent une valeur optimale autour de 60%
-                ideal_humidity = 60.0
+            elif criteria == "Température >55°C pendant 3 jours":
+                # Pour la température, on cherche souvent une valeur optimale autour de 60°C
+                ideal_temp = 60.0
                 
-                # Zone trop sèche
-                if min(criteria_values) < ideal_humidity:
+                # Zone trop chaude
+                if min(criteria_values) < ideal_temp:
                     ax1.axvspan(min(air_flow_values), optimal_flow, color='orange', alpha=0.1)
-                    ax1.annotate('Zone trop sèche\n(<60%)', 
+                    ax1.annotate('Zone trop chaude\n(<60°C)', 
                              ((min(air_flow_values) + optimal_flow)/2, min(criteria_values)*1.1),
                              ha='center', va='center',
                              fontsize=10,
                              bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="orange", alpha=0.8))
                 
-                # Zone trop humide
-                if max(criteria_values) > ideal_humidity:
+                # Zone trop froide
+                if max(criteria_values) > ideal_temp:
                     ax1.axvspan(optimal_flow, max(air_flow_values), color='blue', alpha=0.1)
-                    ax1.annotate('Zone trop humide\n(>60%)', 
+                    ax1.annotate('Zone trop froide\n(>60°C)', 
                              ((optimal_flow + max(air_flow_values))/2, max(criteria_values)*0.9),
                              ha='center', va='center',
                              fontsize=10,
@@ -2898,12 +2919,12 @@ class BioProcessApp(ctk.CTk):
             # Ajouter une légende personnalisée pour expliquer la signification des zones
             legend_elements = []
             
-            if criteria in ["Dégradation des solides", "Température maximale", "Ratio dégradation/énergie"]:
+            if criteria in ["Humidité finale dans [40%, 65%]", "Rapport C/N final dans [15, 20]", "NH₃ émis sous seuil critique"]:
                 legend_elements.append(mpatches.Patch(color='blue', alpha=0.2, label='Zone efficace'))
                 legend_elements.append(mpatches.Patch(color='red', alpha=0.2, label='Zone inefficace'))
-            elif criteria == "Humidité finale":
-                legend_elements.append(mpatches.Patch(color='orange', alpha=0.2, label='Zone trop sèche'))
-                legend_elements.append(mpatches.Patch(color='blue', alpha=0.2, label='Zone trop humide'))
+            elif criteria == "Température >55°C pendant 3 jours":
+                legend_elements.append(mpatches.Patch(color='orange', alpha=0.2, label='Zone trop chaude'))
+                legend_elements.append(mpatches.Patch(color='blue', alpha=0.2, label='Zone trop froide'))
             
             legend_elements.append(mpatches.Patch(color='green', alpha=0.2, label='Zone C/N optimale (20-30)'))
             
@@ -2936,7 +2957,7 @@ class BioProcessApp(ctk.CTk):
             # Ajuster la mise en page avec marges réduites pour assurer la visibilité complète
             plt.tight_layout(rect=[0.03, 0.03, 0.97, 0.92], pad=0.4, h_pad=0.8, w_pad=0.5)
             
-            # Mettre à jour le canvas existant
+            # Mettre à jour le canvas
             self.sensitivity_canvas_plot.draw()
             
             # Display summary in text area
@@ -2945,19 +2966,19 @@ class BioProcessApp(ctk.CTk):
             self.sensitivity_results_text.insert("end", f"Critère d'optimisation: {criteria}\n")
             self.sensitivity_results_text.insert("end", f"Débit d'air optimal: {optimal_flow:.1f} m³/h\n")
             
-            if criteria == "Température maximale":
+            if criteria == "Température >55°C pendant 3 jours":
                 self.sensitivity_results_text.insert("end", f"Température maximale atteinte: {criteria_values[optimal_index]:.2f} °C\n")
-            elif criteria == "Dégradation des solides":
-                self.sensitivity_results_text.insert("end", f"Dégradation totale des solides: {criteria_values[optimal_index]:.2f} kg\n")
-            elif criteria == "Humidité finale":
+            elif criteria == "Humidité finale dans [40%, 65%]":
                 self.sensitivity_results_text.insert("end", f"Humidité finale: {criteria_values[optimal_index]:.2f}%\n")
-            elif criteria == "Ratio dégradation/énergie":
-                self.sensitivity_results_text.insert("end", f"Ratio dégradation/énergie: {criteria_values[optimal_index]:.4f} kg/m³\n")
-            elif criteria == "Rapport C/N final":
+            elif criteria == "Rapport C/N final dans [15, 20]":
                 self.sensitivity_results_text.insert("end", f"Rapport C/N final: {criteria_values[optimal_index]:.2f}\n")
+            elif criteria == "NH₃ émis sous seuil critique":
+                self.sensitivity_results_text.insert("end", f"NH3 émis: {criteria_values[optimal_index]:.2f} kg/m³\n")
+            elif criteria == "Consommation énergétique raisonnable":
+                self.sensitivity_results_text.insert("end", f"Ratio dégradation/énergie: {criteria_values[optimal_index]:.4f} kg/m³\n")
             
             # Ajouter toujours l'information sur le rapport C/N final
-            if criteria != "Rapport C/N final":
+            if criteria != "Rapport C/N final dans [15, 20]":
                 self.sensitivity_results_text.insert("end", f"Rapport C/N final: {cn_ratio_values[optimal_index]:.2f}\n")
             
             # Ajouter des informations sur les paramètres utilisés pour la simulation
@@ -2997,7 +3018,7 @@ class BioProcessApp(ctk.CTk):
             # Ajuster la mise en page avec la légende
             plt.tight_layout(rect=[0, 0, 1, 0.92], pad=0.4, h_pad=0.5, w_pad=0.5)  # Réserver de l'espace en haut pour la légende
             
-            # Mettre à jour le canvas existant
+            # Mettre à jour le canvas
             self.sensitivity_canvas.draw()
             
                         
@@ -3007,8 +3028,40 @@ class BioProcessApp(ctk.CTk):
             # Définir une taille encore plus compacte pour la fenêtre
             self.sensitivity_figure.set_size_inches(7, 5)  # Dimensions réduites
             
+            # Affichage des débits respectant tous les critères
+            valid_flows = []
+            for i, flow in enumerate(air_flow_values):
+                # Critères :
+                # Température >55°C pendant 72h
+                temp_ok = max([t for t in results[i]["Temperatures"] if t > 55], default=0) > 0
+                # On vérifie la durée >55°C
+                times = results[i]["Times"]
+                temps_55 = [times[j] for j, t in enumerate(results[i]["Temperatures"]) if t > 55]
+                temp_duration = (temps_55[-1] - temps_55[0]) if len(temps_55) >= 2 else 0
+                temp_valid = temp_ok and temp_duration >= 72
+                # Humidité finale
+                hum_valid = 40 <= results[i]["MoistureFraction"][-1] <= 65
+                # Rapport C/N final
+                cn_ratios, _ = self.calculate_cn_ratio(results[i], self.substrates)
+                cn_valid = len(cn_ratios) > 0 and 15 <= cn_ratios[-1] <= 20
+                # NH3 émis (si dispo)
+                gas_data, _ = self.calculate_gas_emissions(results[i])
+                nh3_valid = True
+                if "NH3" in gas_data:
+                    nh3_valid = gas_data["NH3"][-1] < 1.0  # seuil critique arbitraire (à ajuster)
+                # Conso énergétique (simple)
+                energy_valid = (flow * self.simulation_params["HRT"]) < 1e6  # seuil arbitraire
+                if temp_valid and hum_valid and cn_valid and nh3_valid and energy_valid:
+                    valid_flows.append(flow)
+            # Affichage dans la zone de texte
+            self.sensitivity_results_text.insert("end", "\nDébits d'air respectant tous les critères :\n")
+            if valid_flows:
+                for f in valid_flows:
+                    self.sensitivity_results_text.insert("end", f"- {f} m³/h\n")
+            else:
+                self.sensitivity_results_text.insert("end", "Aucun débit ne respecte l'ensemble des critères.\n")
         except Exception as e:
-            messagebox.showerror("Erreur", f"Erreur lors de l'analyse de sensibilité: {str(e)}")
+            messagebox.showerror("Erreur", f"Erreur lors de l'analyse de sensibilité : {str(e)}")
     
     def calculate_gas_emissions(self, data):
         """Calcule les émissions de gaz (CO2, O2, NH3) basées sur la dégradation de la matière organique"""
@@ -3302,7 +3355,17 @@ class BioProcessApp(ctk.CTk):
                     # Plusieurs types de données avec différentes unités
                     ax.set_ylabel("Valeur (voir légende pour unités)", fontsize=12)
             
-            ax.set_title("Évolution des paramètres de la phase solide", fontsize=14, fontweight='bold')
+            # Titre et commentaire pédagogique pour la phase solide
+            if len(selected_options) == 1 and "Rapport C/N" in selected_options:
+                ax.set_title("Évolution des paramètres de la phase solide\n(Courbe : Rapport C/N pendant le compostage)", fontsize=14, fontweight='bold')
+                self.solid_figure.text(
+                    0.5, 0.01,
+                    "Le rapport C/N (carbone/azote) est un indicateur clé de la qualité du compost.\n"
+                    "Un rapport trop faible (<10) favorise les pertes d'azote, un rapport trop élevé (>30) ralentit la décomposition.",
+                    ha="center", fontsize=9, color="gray"
+                )
+            else:
+                ax.set_title("Évolution des paramètres de la phase solide", fontsize=14, fontweight='bold')
             ax.grid(True, linestyle='--', alpha=0.7)
             
             # Ajouter une légende seulement si des courbes ont été tracées
